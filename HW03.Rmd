@@ -1,0 +1,34 @@
+---
+title: "HW03"
+author: "greta-anesko"
+date: "2025-03-06"
+output: html_document
+---
+
+```{r}
+library(tidyverse)
+```
+
+```{r}
+df <- read.csv("camera_dataset.csv")
+
+df <- df %>%
+  mutate(pRange = ifelse(Price > 399, "high", ifelse(Price > 150, "medium", "low")))
+
+train <- df %>%
+  filter(Release.date < 2005)
+
+test <- df %>%
+  filter(Release.date >= 2005)
+```
+
+### Part 1: LDA
+```{r}
+lda.fit <- lda(pRange ~ Lag2, data = Weekly, subset = train)
+lda.pred <- predict(lda.fit, Weekly.2009)
+lda.class <- lda.pred$class
+table(lda.class, Direction.2009)
+mean(lda.class == Direction.2009)
+```
+
+

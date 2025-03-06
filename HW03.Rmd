@@ -7,28 +7,88 @@ output: html_document
 
 ```{r}
 library(tidyverse)
+library(MASS)
+library(e1071)
 ```
 
 ```{r}
 df <- read.csv("camera_dataset.csv")
 
 df <- df %>%
-  mutate(pRange = ifelse(Price > 399, "high", ifelse(Price > 150, "medium", "low")))
+  mutate(pRange = ifelse(Price > 399, "high", ifelse(Price > 150, "medium", "low"))) %>%
+  dplyr::select(!c(Model, Price))
 
-train <- df %>%
-  filter(Release.date < 2005)
-
-test <- df %>%
-  filter(Release.date >= 2005)
+train <- (df$Release.date < 2005) 
+test <- df[!train, ]
+dim(test)
+pRange.test <- df$pRange[!train]
 ```
 
 ### Part 1: LDA
 ```{r}
-lda.fit <- lda(pRange ~ Lag2, data = Weekly, subset = train)
-lda.pred <- predict(lda.fit, Weekly.2009)
+lda.fit <- lda(pRange ~ ., data = df, subset = train)
+lda.pred <- predict(lda.fit, test)
 lda.class <- lda.pred$class
-table(lda.class, Direction.2009)
-mean(lda.class == Direction.2009)
+table(lda.class, pRange.test)
+
+(49+2+35)/459 # true high proportion in train
+(31+9+121)/459 # true low proportion in train 
+(22+15+173)/459 # true medium proportion in train
+
+1-(49+9+173)/459 # overall error rate
+1-(49/(49+2+35)) # high class error rate
+1-(9/(31+9+121)) # low class error rate
+1-(173/(22+15+173)) # medium class error rate
+```
+19% of the training data has a "high" class pRange, 35% have a "low" class pRange, and 46% have a "medium" class pRange. The overall estimated test error rate is 50%. The error rate is particularly bad for the "low" class, which has an error rate of 94%.
+
+### Part 2: QDA
+```{r}
+qda.fit <- qda(pRange ~ . , data = df, subset = train)
+qda.fit
+#22.8% of the probabilities are high, 32.5 are low, and 44.7 are medium. 
+
+qda.class <- predict(qda.fit, test)$class
+table(qda.class, pRange.test)
+1-(51+51+129)/(51+14+25+16+51+56+19+96+129)
+#[1]0.4945295
+
+#For high class: 
+(14+25)/(14+25+51)
+#[1] 0.4333333
+
+#For medium class: 
+(19+96)/(19+96+129)
+#[1] 0.4713115
+
+#For low class: 
+(16+56)/(16+51+56)
+#[1] 0.5853659
+```
+The overall error rate is 49%. 22.8% of the probabilities are high, 32.5% are low, and 44.7% are medium. Error rates across classes are roughly equivalent, with the error rate for low class still being the highest at 59%, but this is significantly better than its error rate in the LDA model.
+
+### Part 3: Naive Bayes
+```{r}
+nb.fit <- naiveBayes(pRange ~ ., data = df, subset = train)
+nb.class <- predict(nb.fit, test)
+table(nb.class, pRange.test)
+1-(65+4+132)/459 # overall error rate
+1-(65/(65+3+18)) # high class error rate
+1-(4/(45+4+112)) # low class error rate
+1-(132/(77+3+132)) # medium class error rate
+```
+The overall estimated test error rate is 56%. The error rate is particularly bad for the "low" class, which has an error rate of 98%. This model performs worse than LDA and QDA overall, but it performs slightly better than LDA and QDA for the "high" class, for which it has an error rate of 24%, instead of LDA's and QDA's high class error rates of 43%. 
+
+```{r}
+data <- df[-12]
+high <- (data$pRange == "high")
+medium <- (df$pRange =="medium")
+low <- (df$pRange =="low")
+cor(data[high,])
+cor(data[medium,])-cor(data[low,])
+
+plot(qda.fit)
 ```
 
+Naive Bayes makes the assumption of independent predictors within classes, which we cannot assume for this model: many "better" camera features are likely correlated with each other, as are "worse" camera features. We can see these in the correlation matrices: there are some high correlations between predictors within classes. We are unsure about whether the data comes from a normal distribution, and it may violate that assumption for LDA. We believe QDA would be the most appropriate model because not only are the predictors correlated, their correlation differs between classes. We can see these from the varying correlation matrixes, for example the difference in correlation between Zoom..Wide and Release.date in the medium and low classes was -0.41, which is notably different.
 
